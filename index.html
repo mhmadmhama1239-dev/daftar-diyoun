@@ -24,7 +24,7 @@
   
   /* شاشة القفل */
   #lock-screen{position:fixed;inset:0;background:var(--primary-dark);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff}
-  #lock-screen h2{margin-bottom:20px}
+  #lock-screen h2{margin-bottom:20px; font-weight:700}
   .pin-display{display:flex;gap:15px;margin-bottom:30px;direction:ltr}
   .pin-dot{width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,.3);transition:background .2s}
   .pin-dot.filled{background:#fff}
@@ -73,7 +73,7 @@
   .txn-left{flex:1;min-width:0}
   .txn-cat{font-weight:700;font-size:15px;margin-bottom:3px}
   .txn-meta{font-size:13px;color:var(--muted)}
-  .txn-amount{font-weight:800;font-size:16px;white-space:nowrap}
+  .txn-amount{font-weight:800;font-size:16px;white-space:nowrap;display:flex;flex-direction:column;align-items:flex-end;gap:5px}
   .txn-amount.debt{color:var(--danger)}
   .txn-amount.payment{color:var(--success)}
   .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;display:flex;align-items:flex-end;justify-content:center}
@@ -86,7 +86,7 @@
   .segmented button.active{background:#fff;color:var(--primary);box-shadow:0 1px 3px rgba(0,0,0,.08)}
   .segmented button.active.debt{color:var(--danger)}
   .segmented button.active.payment{color:var(--success)}
-  .toast{position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:#0f172a;color:#fff;padding:12px 20px;border-radius:24px;font-size:14px;z-index:200;opacity:0;transition:opacity .2s;pointer-events:none;font-weight:600}
+  .toast{position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:#0f172a;color:#fff;padding:12px 20px;border-radius:24px;font-size:14px;z-index:200;opacity:0;transition:opacity .2s;pointer-events:none;font-weight:600;text-align:center}
   .toast.show{opacity:1}
   .row-actions{display:flex;gap:8px;margin-bottom:12px}
   .row-actions .btn{flex:1}
@@ -100,7 +100,7 @@
   @media print {
     body { background: #fff; }
     .app { max-width: 100%; display: block !important; }
-    .topbar, .fab, .row-actions, .close-btn, .section-title { display: none !important; }
+    .topbar, .fab, .row-actions, .close-btn, .section-title, .txn-amount button { display: none !important; }
     .card { box-shadow: none; border: 1px solid #ccc; page-break-inside: avoid; }
     .balance-card { background: #fff !important; color: #000 !important; border: 2px solid #0f766e; }
     .balance-card .amount { color: #0f766e; }
@@ -146,9 +146,9 @@ const defaultData = () => ({
     currencies: ['USD', 'LBP'],
     rates: { USD: 1, LBP: 89500 },
     categories: [
-      { id: 'c1', name: 'بضاعة', color: 'bag', commission: { type: 'none', value: 0 } },
-      { id: 'c2', name: 'رصيد جوال', color: 'credit', commission: { type: 'none', value: 0 } },
-      { id: 'c3', name: 'حوالات', color: 'transfer', commission: { type: 'fixed', value: 1 } }
+      { id: 'c1', name: 'بضاعة', color: 'bag' },
+      { id: 'c2', name: 'رصيد جوال', color: 'credit' },
+      { id: 'c3', name: 'حوالات', color: 'transfer' }
     ],
     waTemplate: 'مرحباً {name} 👋\nكشف حسابك لدى {shop}:\nالرصيد المتبقي: {balance}\n\nآخر الحركات:\n{last_txns}\n\nشكراً لتعاملكم معنا.'
   },
@@ -178,7 +178,7 @@ const fmt = (n) => {
 const today = () => new Date().toISOString().slice(0,10);
 const catById = (id) => data.shop.categories.find(c => c.id === id) || { name: 'أخرى', color: 'bag' };
 
-// ==== منطق قفل PIN ====
+// ==== قفل PIN ====
 function checkLock(){
   if (data.shop.pin && sessionStorage.getItem('app_unlocked') !== 'true') {
     document.getElementById('lock-screen').style.display = 'flex';
@@ -212,7 +212,7 @@ function enterPin(num){
   }
 }
 
-// ==== الحسابات ====
+// ==== حسابات ====
 function calcCustomerBalance(customerId){
   const txns = data.transactions.filter(t => t.customerId === customerId);
   const byCurrency = {};
@@ -234,8 +234,11 @@ function calcCustomerBalance(customerId){
   return { byCurrency, byCategory, totalBase, txns };
 }
 function customerTotalBase(customerId){ return calcCustomerBalance(customerId).totalBase; }
+function totalCommissionsBase(){
+  return data.transactions.reduce((sum, t) => sum + (t.commission ? t.commission / (t.rate || 1) : 0), 0);
+}
 
-// ==== التوجيه والواجهات ====
+// ==== واجهات ====
 function render(){
   const hash = location.hash.replace('#','') || 'home';
   if (hash.startsWith('customer/')) {
@@ -251,6 +254,7 @@ function render(){
 
 function renderHome(){
   const totalAll = data.customers.reduce((s,c) => s + customerTotalBase(c.id), 0);
+  const totalComm = totalCommissionsBase();
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="print-header">
@@ -267,6 +271,14 @@ function renderHome(){
         <div class="amount">${fmt(totalAll)} ${data.shop.baseCurrency}</div>
         <div class="sub">${data.customers.length} زبون</div>
       </div>
+      
+      ${totalComm > 0 ? `
+      <div class="card" style="background:#f0fdf4; border-color:#bbf7d0; display:flex; justify-content:space-between; align-items:center;">
+        <div style="font-weight:700; color:#166534;">💰 إجمالي العمولات المحصلة:</div>
+        <div style="font-weight:800; color:#15803d;">${fmt(totalComm)} ${data.shop.baseCurrency}</div>
+      </div>
+      ` : ''}
+
       <div class="section-title">الزبائن</div>
       <div class="card" style="padding:0;overflow:hidden">
         ${data.customers.length === 0 ? `
@@ -351,8 +363,12 @@ function renderCustomer(id){
               <div class="txn-left">
                 <div class="txn-cat">${escapeHtml(cat.name)} <span class="chip ${chipClass}">${t.type === 'debt' ? 'دين' : 'دفعة'}</span></div>
                 <div class="txn-meta">${t.date}${t.note ? ' — ' + escapeHtml(t.note) : ''}</div>
+                ${t.commission ? `<div style="font-size:11px; color:var(--muted); margin-top:2px;">عمولة: ${fmt(t.commission)} ${t.currency}</div>` : ''}
               </div>
-              <div class="txn-amount ${t.type}">${t.type==='debt'?'+':'−'}${fmt(t.amount)} ${t.currency}</div>
+              <div class="txn-amount ${t.type}">
+                <span>${t.type==='debt'?'+':'−'}${fmt(t.amount)} ${t.currency}</span>
+                <button onclick="deleteTransaction('${t.id}', '${id}')" style="background:none; border:none; color:var(--danger); font-size:12px; cursor:pointer; padding:0;">🗑️ حذف</button>
+              </div>
             </div>
           `;
         }).join('')}
@@ -363,12 +379,12 @@ function renderCustomer(id){
   `;
 }
 
-// ==== النوافذ المنبثقة ====
+// ==== النوافذ ====
 function openAddCustomer(){
   showModal(`
     <div class="modal-header"><h2>زبون جديد</h2><button class="close-btn" onclick="closeModal()">×</button></div>
     <div class="field"><label>الاسم *</label><input id="new-name" placeholder="مثال: محمد علي"></div>
-    <div class="field"><label>رقم الواتساب (بالصيغة الدولية)</label><input id="new-phone" type="tel" placeholder="مثال: 96170123456" dir="ltr" style="text-align:left"></div>
+    <div class="field"><label>رقم الواتساب (بالصيغة الدولية)</label><input id="new-phone" type="tel" placeholder="مثال: 963912345678" dir="ltr" style="text-align:left"></div>
     <div class="field"><label>ملاحظة (اختياري)</label><input id="new-note" placeholder="مثال: جار المحل"></div>
     <button class="btn" onclick="saveCustomer()">حفظ</button>
   `);
@@ -382,7 +398,8 @@ function openEditCustomer(id){
     <div class="field"><label>الاسم *</label><input id="new-name" value="${escapeHtml(c.name)}"></div>
     <div class="field"><label>رقم الواتساب</label><input id="new-phone" type="tel" value="${escapeHtml(c.phone||'')}" dir="ltr" style="text-align:left"></div>
     <div class="field"><label>ملاحظة</label><input id="new-note" value="${escapeHtml(c.note||'')}"></div>
-    <button class="btn" onclick="updateCustomer('${id}')">تحديث</button>
+    <button class="btn" onclick="updateCustomer('${id}')">تحديث البيانات</button>
+    <button class="btn danger" style="margin-top:10px" onclick="deleteCustomer('${id}')">🗑️ حذف الزبون</button>
   `);
 }
 
@@ -407,6 +424,14 @@ function updateCustomer(id){
   saveData(); closeModal(); toast('تم التحديث'); render();
 }
 
+function deleteCustomer(id) {
+  if (confirm('هل أنت متأكد من حذف هذا الزبون؟ سيتم حذف كل ديونه وحركاته نهائياً ولا يمكن التراجع!')) {
+    data.customers = data.customers.filter(c => c.id !== id);
+    data.transactions = data.transactions.filter(t => t.customerId !== id);
+    saveData(); closeModal(); location.hash = ''; toast('تم حذف الزبون');
+  }
+}
+
 function openAddTransaction(customerId){
   const cur = data.shop.baseCurrency;
   showModal(`
@@ -429,6 +454,10 @@ function openAddTransaction(customerId){
       </div>
     </div>
     <div class="field" id="rate-hint" style="font-size:13px;color:var(--muted);margin-top:-6px"></div>
+    <div class="field">
+      <label>العمولة (اختياري - للمحل فقط)</label>
+      <input id="txn-commission" type="number" inputmode="decimal" step="0.01" placeholder="مثال: 1">
+    </div>
     <div class="field"><label>التاريخ</label><input id="txn-date" type="date" value="${today()}"></div>
     <div class="field"><label>ملاحظة (اختياري)</label><input id="txn-note" placeholder="مثال: 3 كيلو سكر"></div>
     <button class="btn" onclick="saveTransaction('${customerId}')">حفظ الحركة</button>
@@ -458,15 +487,27 @@ function saveTransaction(customerId){
   const amount = parseFloat(document.getElementById('txn-amount').value);
   const currency = document.getElementById('txn-currency').value;
   const categoryId = document.getElementById('txn-category').value;
+  const commission = parseFloat(document.getElementById('txn-commission').value) || 0;
   const date = document.getElementById('txn-date').value;
   const note = document.getElementById('txn-note').value.trim();
+  
   if (!amount || amount <= 0) { toast('أدخل مبلغاً صحيحاً'); return; }
+  
   const rate = data.shop.rates[currency] || 1;
-  data.transactions.push({ id: uid(), customerId, type, amount, currency, rate, categoryId, date, note, createdAt: Date.now() });
+  data.transactions.push({ 
+    id: uid(), customerId, type, amount, currency, rate, categoryId, commission, date, note, createdAt: Date.now() 
+  });
   saveData(); closeModal(); toast('تم حفظ الحركة'); render();
 }
 
-// ==== إرسال الواتساب المتقدم ====
+function deleteTransaction(txnId, customerId) {
+  if (confirm('هل أنت متأكد من حذف هذه الحركة؟ سيتم تعديل الحساب تلقائياً.')) {
+    data.transactions = data.transactions.filter(t => t.id !== txnId);
+    saveData(); renderCustomer(customerId); toast('تم حذف الحركة');
+  }
+}
+
+// ==== واتساب ====
 function sendWhatsApp(customerId){
   const c = data.customers.find(x => x.id === customerId);
   if (!c) return;
@@ -479,7 +520,6 @@ function sendWhatsApp(customerId){
     ...Object.entries(byCurrency).filter(([,v]) => Math.abs(v) > 0.001).map(([cur,v]) => `${fmt(v)} ${cur}`)
   ].join(' / ');
   
-  // جلب آخر 5 حركات
   const sortedTxns = [...txns].sort((a,b) => b.createdAt - a.createdAt).slice(0, 5).reverse();
   let lastTxnsText = sortedTxns.map(t => {
     const cat = catById(t.categoryId).name;
@@ -546,16 +586,12 @@ function renderSettings(){
 function setPin(){
   const p = prompt("أدخل رمز PIN مكون من 4 أرقام:");
   if(p && p.length === 4 && !isNaN(p)){
-    data.shop.pin = p;
-    saveData(); toast('تم تفعيل القفل'); renderSettings();
-  } else if(p !== null){
-    toast('يجب أن يكون 4 أرقام');
-  }
+    data.shop.pin = p; saveData(); toast('تم تفعيل القفل'); renderSettings();
+  } else if(p !== null){ toast('يجب أن يكون 4 أرقام'); }
 }
 function removePin(){
   if(confirm('هل تريد إلغاء قفل التطبيق؟')) {
-    data.shop.pin = null;
-    sessionStorage.removeItem('app_unlocked');
+    data.shop.pin = null; sessionStorage.removeItem('app_unlocked');
     saveData(); toast('تم إلغاء القفل'); renderSettings();
   }
 }
@@ -620,7 +656,11 @@ function toast(msg){
 window.addEventListener('hashchange', render);
 window.addEventListener('DOMContentLoaded', () => {
   checkLock();
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(()=>{});
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('service-worker.js').catch(()=>{});
+    // هذا السطر يجبر التطبيق على إعادة التشغيل فوراً إذا وجد نسخة جديدة
+    navigator.serviceWorker.addEventListener('controllerchange', () => { window.location.reload(); });
+  }
 });
 </script>
 </body>
